@@ -1,0 +1,94 @@
+name: 3. Destroy Infrastructure
+
+on:
+  workflow_dispatch:  # Manual trigger only
+    inputs:
+      confirm:
+        description: 'Type "destroy" to confirm infrastructure destruction'
+        required: true
+        default: ''
+
+env:
+  AWS_REGION: eu-central-1
+  TF_VERSION: 1.5.0
+  CLUSTER_NAME: eks-flask-app-cluster
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  cleanup-kubernetes:
+    name: Cleanup Kubernetes Resources
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'destroy'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials using OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::518394500999:role/GitHubActionsRole
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v3
+
+    - name: Install Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: '3.12.0'
+
+    - name: Configure kubectl
+      run: |
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }} || echo "Cluster may not exist"
+
+    - name: Uninstall Helm release
+      run: |
+        helm uninstall flask-app || echo "Helm release not found"
+
+    - name: Delete LoadBalancer services
+      run: |
+        kubectl delete svc --all --grace-period=0 --force || echo "No services to delete"
+
+    - name: Wait for LoadBalancers to be deleted
+      run: |
+        echo "Waiting for LoadBalancers to be fully deleted..."
+        sleep 60
+
+  destroy-infrastructure:
+    name: Destroy Infrastructure with Terraform
+    needs: cleanup-kubernetes
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'destroy'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials using OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::518394500999:role/GitHubActionsRole
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Terraform Init
+      working-directory: ./terraform/infrastructure
+      run: terraform init
+
+    - name: Terraform Destroy
+      working-directory: ./terraform/infrastructure
+      run: terraform destroy -auto-approve
+
+    - name: Cleanup completed
+      run: |
+        echo "Infrastructure destroyed successfully"
+        echo "Note: Bootstrap resources (S3 bucket and DynamoDB table) were NOT destroyed"
+        echo "To destroy bootstrap, run terraform destroy in terraform/bootstrap directory manually"

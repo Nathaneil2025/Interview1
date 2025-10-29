@@ -1,0 +1,19 @@
+replicaCount: 2
+
+image:
+  repository: 518394500999.dkr.ecr.eu-central-1.amazonaws.com/eks-flask-app
+  pullPolicy: Always
+  tag: latest
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 5000
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi

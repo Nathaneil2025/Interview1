@@ -1,0 +1,121 @@
+name: 2. Build, Push & Deploy Application
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+env:
+  AWS_REGION: eu-central-1
+  ECR_REPOSITORY: eks-flask-app
+  CLUSTER_NAME: eks-flask-app-cluster
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.generate-tag.outputs.tag }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials using OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::518394500999:role/GitHubActionsRole
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Get ECR repository URL
+      id: ecr-url
+      run: |
+        ECR_URL=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }} --query 'repositories[0].repositoryUri' --output text)
+        echo "ecr_url=$ECR_URL" >> $GITHUB_OUTPUT
+
+    - name: Generate version tag
+      id: generate-tag
+      run: |
+        TIMESTAMP=$(date +%Y%m%d%H%M%S)
+        
+        # Get the latest version number from ECR
+        LATEST_VER=$(aws ecr describe-images --repository-name ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }} --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]' --output text 2>/dev/null || echo "ver0")
+        
+        # Extract version number (e.g., ver1-20231029120000 -> 1)
+        if [[ $LATEST_VER =~ ver([0-9]+) ]]; then
+          CURRENT_NUM=${BASH_REMATCH[1]}
+          NEXT_NUM=$((CURRENT_NUM + 1))
+        else
+          NEXT_NUM=1
+        fi
+        
+        TAG="ver${NEXT_NUM}-${TIMESTAMP}"
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "Generated tag: $TAG"
+
+    - name: Build Docker image
+      working-directory: ./app
+      run: |
+        docker build -t ${{ env.ECR_REPOSITORY }}:${{ steps.generate-tag.outputs.tag }} .
+        docker tag ${{ env.ECR_REPOSITORY }}:${{ steps.generate-tag.outputs.tag }} ${{ steps.ecr-url.outputs.ecr_url }}:${{ steps.generate-tag.outputs.tag }}
+        docker tag ${{ env.ECR_REPOSITORY }}:${{ steps.generate-tag.outputs.tag }} ${{ steps.ecr-url.outputs.ecr_url }}:latest
+
+    - name: Push Docker image to ECR
+      run: |
+        docker push ${{ steps.ecr-url.outputs.ecr_url }}:${{ steps.generate-tag.outputs.tag }}
+        docker push ${{ steps.ecr-url.outputs.ecr_url }}:latest
+
+  deploy-to-eks:
+    name: Deploy to EKS with Helm
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials using OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::518394500999:role/GitHubActionsRole
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v3
+
+    - name: Install Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: '3.12.0'
+
+    - name: Configure kubectl
+      run: |
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
+
+    - name: Get latest image by timestamp
+      id: get-latest
+      run: |
+        # Get all image tags sorted by push time
+        LATEST_TAG=$(aws ecr describe-images --repository-name ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }} --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]' --output text)
+        echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+        echo "Latest image tag: $LATEST_TAG"
+
+    - name: Deploy with Helm
+      run: |
+        helm upgrade --install flask-app ./helm/flask-app \
+          --set image.tag=${{ steps.get-latest.outputs.latest_tag }} \
+          --wait \
+          --timeout 5m
+
+    - name: Get LoadBalancer URL
+      run: |
+        echo "Waiting for LoadBalancer to be ready..."
+        sleep 30
+        LB_URL=$(kubectl get svc flask-app -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        echo "Application URL: http://$LB_URL"
