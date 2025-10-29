@@ -86,6 +86,10 @@ jobs:
         role-to-assume: arn:aws:iam::518394500999:role/GitHubActionsRole
         aws-region: ${{ env.AWS_REGION }}
 
+    - name: Verify AWS credentials
+      run: |
+        aws sts get-caller-identity
+
     - name: Install kubectl
       uses: azure/setup-kubectl@v3
 
@@ -94,14 +98,20 @@ jobs:
       with:
         version: '3.12.0'
 
-    - name: Configure kubectl
+    - name: Install AWS CLI
+      run: |
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        unzip awscliv2.zip
+        sudo ./aws/install --update
+
+    - name: Configure kubectl for EKS
       run: |
         aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
+        kubectl cluster-info
 
     - name: Get latest image by timestamp
       id: get-latest
       run: |
-        # Get all image tags sorted by push time
         LATEST_TAG=$(aws ecr describe-images --repository-name ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }} --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]' --output text)
         echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
         echo "Latest image tag: $LATEST_TAG"
