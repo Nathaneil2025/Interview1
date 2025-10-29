@@ -38,25 +38,7 @@ resource "null_resource" "update_aws_auth" {
   provisioner "local-exec" {
     command = <<-EOT
       aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.main.name}
-      
-      cat <<EOF | kubectl apply -f -
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: aws-auth
-        namespace: kube-system
-      data:
-        mapRoles: |
-          - rolearn: ${aws_iam_role.eks_nodes.arn}
-            username: system:node:{{EC2PrivateDNSName}}
-            groups:
-              - system:bootstrappers
-              - system:nodes
-          - rolearn: arn:aws:iam::518394500999:role/GitHubActionsRole
-            username: github-actions
-            groups:
-              - system:masters
-      EOF
+      sed 's/$${nodes_role_arn}/${aws_iam_role.eks_nodes.arn}/g' ${path.module}/aws-auth-configmap.yaml | kubectl apply -f -
     EOT
   }
 
