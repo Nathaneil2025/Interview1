@@ -31,6 +31,26 @@ resource "aws_eks_cluster" "main" {
   ]
 }
 
+# AWS Auth ConfigMap - Allow GitHub Actions Role to access EKS
+# AWS Auth ConfigMap - Allow GitHub Actions Role to access EKS
+resource "null_resource" "update_aws_auth" {
+  provisioner "local-exec" {
+    command = <<-EOT
+      aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.main.name}
+      kubectl patch configmap/aws-auth -n kube-system --patch '{"data":{"mapRoles":"- rolearn: ${aws_iam_role.eks_nodes.arn}\n  username: system:node:{{EC2PrivateDNSName}}\n  groups:\n    - system:bootstrappers\n    - system:nodes\n- rolearn: arn:aws:iam::518394500999:role/GitHubActionsRole\n  username: github-actions\n  groups:\n    - system:masters\n"}}'
+    EOT
+  }
+
+  depends_on = [
+    aws_eks_cluster.main,
+    aws_eks_node_group.public,
+    aws_eks_node_group.private
+  ]
+
+  triggers = {
+    always_run = timestamp()
+  }
+}
 ###########################################
 # EKS NODE GROUPS
 ###########################################
