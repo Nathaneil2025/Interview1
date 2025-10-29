@@ -37,9 +37,9 @@ jobs:
       uses: azure/setup-kubectl@v3
 
     - name: Install Helm
-      uses: azure/setup-helm@v3
-      with:
-        version: '3.12.0'
+      run: |
+        sudo snap install helm --classic
+        helm version
 
     - name: Configure kubectl
       run: |
@@ -49,18 +49,84 @@ jobs:
       run: |
         helm uninstall flask-app || echo "Helm release not found"
 
-    - name: Delete LoadBalancer services
+    - name: Delete all LoadBalancer services
       run: |
+        echo "Deleting all LoadBalancer services..."
         kubectl delete svc --all --grace-period=0 --force || echo "No services to delete"
 
     - name: Wait for LoadBalancers to be deleted
       run: |
-        echo "Waiting for LoadBalancers to be fully deleted..."
-        sleep 60
+        echo "Waiting for LoadBalancers to be fully deleted from AWS..."
+        sleep 90
+
+    - name: Delete LoadBalancer security groups
+      run: |
+        echo "Finding and deleting LoadBalancer security groups..."
+        
+        # Find security groups created by Kubernetes (tagged with cluster name)
+        LB_SG_IDS=$(aws ec2 describe-security-groups \
+          --region ${{ env.AWS_REGION }} \
+          --filters "Name=tag:kubernetes.io/cluster/${{ env.CLUSTER_NAME }},Values=owned" \
+                    "Name=tag:kubernetes.io/service-name,Values=*" \
+          --query 'SecurityGroups[*].GroupId' \
+          --output text)
+        
+        if [ -n "$LB_SG_IDS" ]; then
+          for SG_ID in $LB_SG_IDS; do
+            echo "Deleting security group: $SG_ID"
+            aws ec2 delete-security-group --group-id $SG_ID --region ${{ env.AWS_REGION }} || echo "Failed to delete $SG_ID, may have dependencies"
+          done
+        else
+          echo "No LoadBalancer security groups found"
+        fi
+
+    - name: Final wait for cleanup
+      run: |
+        echo "Final wait to ensure all resources are cleaned up..."
+        sleep 30
+
+  scale-down-nodes:
+    name: Scale Down Node Groups
+    needs: cleanup-kubernetes
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'destroy'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials using OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::518394500999:role/GitHubActionsRole
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Scale down public node group to 0
+      run: |
+        echo "Scaling down public node group to 0..."
+        aws eks update-nodegroup-config \
+          --cluster-name ${{ env.CLUSTER_NAME }} \
+          --nodegroup-name eks-flask-app-public-node-group \
+          --scaling-config minSize=0,maxSize=0,desiredSize=0 \
+          --region ${{ env.AWS_REGION }} || echo "Public node group not found"
+
+    - name: Scale down private node group to 0
+      run: |
+        echo "Scaling down private node group to 0..."
+        aws eks update-nodegroup-config \
+          --cluster-name ${{ env.CLUSTER_NAME }} \
+          --nodegroup-name eks-flask-app-private-node-group \
+          --scaling-config minSize=0,maxSize=0,desiredSize=0 \
+          --region ${{ env.AWS_REGION }} || echo "Private node group not found"
+
+    - name: Wait for nodes to terminate
+      run: |
+        echo "Waiting for all nodes to terminate..."
+        sleep 120
 
   destroy-infrastructure:
     name: Destroy Infrastructure with Terraform
-    needs: cleanup-kubernetes
+    needs: scale-down-nodes
     runs-on: ubuntu-latest
     if: github.event.inputs.confirm == 'destroy'
     
