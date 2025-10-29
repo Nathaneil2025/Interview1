@@ -7,7 +7,7 @@ app = Flask(__name__)
 @app.route('/')
 def home():
     return jsonify({
-        'message': 'Welcome to Flask App on EKS!',
+        'message': 'Welcome to Flask App on EKS! new ver',
         'status': 'running',
         'hostname': socket.gethostname(),
         'version': os.getenv('APP_VERSION', '1.0.0')
