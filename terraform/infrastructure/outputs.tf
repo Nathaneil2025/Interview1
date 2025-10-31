@@ -102,3 +102,16 @@ output "configure_kubectl" {
   description = "Command to configure kubectl"
   value       = "aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.main.name}"
 }
+
+
+output "grafana_instructions" {
+  description = "Instructions to access Grafana"
+  value = <<-EOT
+    After deployment completes, get Grafana URL with:
+    kubectl get svc -n monitoring prometheus-grafana
+    
+    Grafana credentials:
+    Username: admin
+    Password: D3xt3r!@1944
+  EOT
+}
