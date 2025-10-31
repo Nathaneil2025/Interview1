@@ -1,7 +1,7 @@
 # providers.tf
 
 # -----------------------------------------------------------------------------
-# 1. AWS EKS Cluster Auth Data Source (Needed by both providers)
+# 1. AWS EKS Cluster Auth Data Source
 # -----------------------------------------------------------------------------
 data "aws_eks_cluster_auth" "main" {
   name = aws_eks_cluster.main.name
@@ -9,7 +9,6 @@ data "aws_eks_cluster_auth" "main" {
 
 # -----------------------------------------------------------------------------
 # 2. Kubernetes Provider Configuration
-# Used for deploying Kubernetes objects (like Namespaces)
 # -----------------------------------------------------------------------------
 provider "kubernetes" {
   host                   = aws_eks_cluster.main.endpoint
@@ -18,10 +17,8 @@ provider "kubernetes" {
 }
 
 # -----------------------------------------------------------------------------
-# 3. Helm Provider Configuration (Correct Syntax)
-# This uses the Kubernetes provider's configuration implicitly or explicitly.
+# 3. Helm Provider Configuration 
+# No kubernetes block needed here; it should inherit from the kubernetes provider above.
+# If this still fails, we'll confirm version constraints.
 # -----------------------------------------------------------------------------
-provider "helm" {
-  # Helm provider uses the configuration from the default Kubernetes provider block.
-  # No 'kubernetes {}' block is required here if the 'kubernetes' provider is defined.
-}
+provider "helm" {}
