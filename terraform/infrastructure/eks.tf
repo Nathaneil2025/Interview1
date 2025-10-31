@@ -51,7 +51,7 @@ resource "aws_eks_access_entry" "github_actions_access" {
 resource "null_resource" "update_aws_auth" {
   depends_on = [
     aws_eks_cluster.main,
-    aws_eks_access_entry.node_group_access
+   
   ]
 
   provisioner "local-exec" {
