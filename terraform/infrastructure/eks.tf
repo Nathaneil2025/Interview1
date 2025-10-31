@@ -38,8 +38,9 @@ resource "null_resource" "update_aws_auth" {
   provisioner "local-exec" {
     command = <<-EOT
       aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.main.name}
-      sed 's/$${nodes_role_arn}/${aws_iam_role.eks_nodes.arn}/g' ${path.module}/aws-auth-configmap.yaml | kubectl apply -f -
+      sed "s|NODES_ROLE_ARN_PLACEHOLDER|${aws_iam_role.eks_nodes.arn}|g" ${path.module}/aws-auth-configmap.yaml | kubectl apply -f -
     EOT
+    interpreter = ["bash", "-c"]
   }
 
   depends_on = [
