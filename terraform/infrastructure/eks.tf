@@ -125,6 +125,20 @@ resource "aws_eks_addon" "ebs_csi_driver" {
     aws_iam_role_policy_attachment.ebs_csi_driver
   ]
 
+  # Prevent hanging during updates/creates
+  timeouts {
+    create = "20m"
+    update = "20m"
+    delete = "10m"
+  }
+
+  # Ignore health issues during initial deployment
+  lifecycle {
+    ignore_changes = [
+      modified_at
+    ]
+  }
+
   tags = {
     Name        = "${var.project_name}-ebs-csi-driver"
     Environment = var.environment
