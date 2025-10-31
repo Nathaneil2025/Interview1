@@ -8,8 +8,10 @@ resource "aws_eks_cluster" "main" {
   version  = var.cluster_version
 
   vpc_config {
-    subnet_ids              = [aws_subnet.public.id, aws_subnet.private.id]
-    security_group_ids      = [aws_security_group.eks_cluster.id]
+    # It's recommended to use only private subnets for EKS control plane ENIs,
+    # but using both public and private is acceptable if necessary.
+    subnet_ids           = [aws_subnet.public.id, aws_subnet.private.id]
+    security_group_ids   = [aws_security_group.eks_cluster.id]
     endpoint_private_access = true
     endpoint_public_access  = true
   }
@@ -30,35 +32,39 @@ resource "aws_eks_cluster" "main" {
     aws_nat_gateway.main
   ]
   
-  # TEMPORARY LIFECYCLE BLOCK: Prevents destruction/replacement during import/destroy process
-  lifecycle {
-    ignore_changes = all
-  }
+  # REMOVED: lifecycle { ignore_changes = all }. Keep this removed unless
+  # you are actively performing an import or a very specific temporary operation.
 }
 
- 
- 
-# AWS Auth ConfigMap - Allow GitHub Actions Role to access EKS
-resource "null_resource" "update_aws_auth" {
-  provisioner "local-exec" {
-    command = <<-EOT
-      aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.main.name}
-      sed "s|NODES_ROLE_ARN_PLACEHOLDER|${aws_iam_role.eks_nodes.arn}|g" ${path.module}/aws-auth-configmap.yaml | kubectl apply -f -
-    EOT
-    interpreter = ["bash", "-c"]
-  }
+---
 
-  depends_on = [
-    aws_eks_cluster.main,
-    aws_eks_node_group.public,
-    aws_eks_node_group.private
-  ]
+# EKS Access Entries (Modern Replacement for aws-auth ConfigMap)
 
-  triggers = {
-    eks_cluster = aws_eks_cluster.main.id
-    nodes_role  = aws_iam_role.eks_nodes.arn
-  }
+# Grant access for the Node Group's IAM role (aws_iam_role.eks_nodes)
+# This replaces the need for the manual ConfigMap update for nodes.
+resource "aws_eks_access_entry" "node_group_access" {
+  cluster_name  = aws_eks_cluster.main.name
+  principal_arn = aws_iam_role.eks_nodes.arn
+  kubernetes_groups = ["system:bootstrappers", "system:nodes"]
+  # The 'standard' type is appropriate for EKS Managed Node Group roles
+  type          = "standard" 
 }
+
+# Grant access for the GitHub Actions IAM Role (Assuming you have this role defined elsewhere)
+# You will need to define the GitHub Actions Role resource (e.g., aws_iam_role.github_actions)
+/*
+resource "aws_eks_access_entry" "github_actions_access" {
+  cluster_name  = aws_eks_cluster.main.name
+  principal_arn = aws_iam_role.github_actions.arn
+  kubernetes_groups = ["system:masters"] # Or a custom group for CI/CD access
+}
+*/
+
+# The null_resource for aws-auth is now entirely removed.
+# resource "null_resource" "update_aws_auth" is DELETED
+
+---
+
 ###########################################
 # EKS NODE GROUPS
 ###########################################
@@ -92,10 +98,7 @@ resource "aws_eks_node_group" "public" {
     aws_eks_cluster.main
   ]
   
-  # TEMPORARY LIFECYCLE BLOCK: Prevents destruction/replacement during import/destroy process
-  lifecycle {
-    ignore_changes = all
-  }
+  # REMOVED: lifecycle { ignore_changes = all }
 }
 
 # Private Node Group
@@ -127,8 +130,16 @@ resource "aws_eks_node_group" "private" {
     aws_eks_cluster.main
   ]
   
-  # TEMPORARY LIFECYCLE BLOCK: Prevents destruction/replacement during import/destroy process
-  lifecycle {
-    ignore_changes = all
-  }
+  # REMOVED: lifecycle { ignore_changes = all }
+}
+
+---
+
+# EKS Addons
+resource "aws_eks_addon" "ebs_csi_driver" {
+  cluster_name                = aws_eks_cluster.main.name
+  addon_name                  = "aws-ebs-csi-driver"
+  # Corrected for the deprecation of 'resolve_conflicts'
+  resolve_conflicts_on_create = "OVERWRITE" 
+  resolve_conflicts_on_update = "OVERWRITE"
 }
