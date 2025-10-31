@@ -42,24 +42,45 @@ jobs:
         helm version
 
     - name: Configure kubectl
+      continue-on-error: true
       run: |
-        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }} || echo "Cluster may not exist"
+        aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }} || {
+          echo "Cluster does not exist or cannot be accessed. Skipping Kubernetes cleanup."
+          exit 0
+        }
+
+    - name: Check if cluster is accessible
+      id: cluster-check
+      continue-on-error: true
+      run: |
+        if kubectl cluster-info &> /dev/null; then
+          echo "accessible=true" >> $GITHUB_OUTPUT
+        else
+          echo "accessible=false" >> $GITHUB_OUTPUT
+          echo "Cluster is not accessible. Skipping Kubernetes cleanup."
+        fi
 
     - name: Uninstall Helm release
+      if: steps.cluster-check.outputs.accessible == 'true'
+      continue-on-error: true
       run: |
         helm uninstall flask-app || echo "Helm release not found"
 
     - name: Delete all LoadBalancer services
+      if: steps.cluster-check.outputs.accessible == 'true'
+      continue-on-error: true
       run: |
         echo "Deleting all LoadBalancer services..."
         kubectl delete svc --all --grace-period=0 --force || echo "No services to delete"
 
     - name: Wait for LoadBalancers to be deleted
+      if: steps.cluster-check.outputs.accessible == 'true'
       run: |
         echo "Waiting for LoadBalancers to be fully deleted from AWS..."
         sleep 90
 
     - name: Delete LoadBalancer security groups
+      continue-on-error: true
       run: |
         echo "Finding and deleting LoadBalancer security groups..."
         
@@ -69,12 +90,12 @@ jobs:
           --filters "Name=tag:kubernetes.io/cluster/${{ env.CLUSTER_NAME }},Values=owned" \
                     "Name=tag:kubernetes.io/service-name,Values=*" \
           --query 'SecurityGroups[*].GroupId' \
-          --output text)
+          --output text 2>/dev/null || echo "")
         
         if [ -n "$LB_SG_IDS" ]; then
           for SG_ID in $LB_SG_IDS; do
             echo "Deleting security group: $SG_ID"
-            aws ec2 delete-security-group --group-id $SG_ID --region ${{ env.AWS_REGION }} || echo "Failed to delete $SG_ID, may have dependencies"
+            aws ec2 delete-security-group --group-id $SG_ID --region ${{ env.AWS_REGION }} 2>/dev/null || echo "Failed to delete $SG_ID, may have dependencies or already deleted"
           done
         else
           echo "No LoadBalancer security groups found"
@@ -101,25 +122,41 @@ jobs:
         role-to-assume: arn:aws:iam::518394500999:role/GitHubActionsRole
         aws-region: ${{ env.AWS_REGION }}
 
+    - name: Check if cluster exists
+      id: cluster-exists
+      continue-on-error: true
+      run: |
+        if aws eks describe-cluster --name ${{ env.CLUSTER_NAME }} --region ${{ env.AWS_REGION }} &> /dev/null; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "Cluster does not exist. Skipping node group scaling."
+        fi
+
     - name: Scale down public node group to 0
+      if: steps.cluster-exists.outputs.exists == 'true'
+      continue-on-error: true
       run: |
         echo "Scaling down public node group to 0..."
         aws eks update-nodegroup-config \
           --cluster-name ${{ env.CLUSTER_NAME }} \
           --nodegroup-name eks-flask-app-public-node-group \
           --scaling-config minSize=0,maxSize=0,desiredSize=0 \
-          --region ${{ env.AWS_REGION }} || echo "Public node group not found"
+          --region ${{ env.AWS_REGION }} 2>/dev/null || echo "Public node group not found or already scaled down"
 
     - name: Scale down private node group to 0
+      if: steps.cluster-exists.outputs.exists == 'true'
+      continue-on-error: true
       run: |
         echo "Scaling down private node group to 0..."
         aws eks update-nodegroup-config \
           --cluster-name ${{ env.CLUSTER_NAME }} \
           --nodegroup-name eks-flask-app-private-node-group \
           --scaling-config minSize=0,maxSize=0,desiredSize=0 \
-          --region ${{ env.AWS_REGION }} || echo "Private node group not found"
+          --region ${{ env.AWS_REGION }} 2>/dev/null || echo "Private node group not found or already scaled down"
 
     - name: Wait for nodes to terminate
+      if: steps.cluster-exists.outputs.exists == 'true'
       run: |
         echo "Waiting for all nodes to terminate..."
         sleep 120
