@@ -29,7 +29,7 @@ resource "null_resource" "deploy_monitoring" {
     aws_eks_cluster.main,
     aws_eks_node_group.public,
     aws_eks_node_group.private,
-    null_resource.update_aws_auth
+   
   ]
 
   triggers = {
