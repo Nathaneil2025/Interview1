@@ -29,6 +29,11 @@ resource "aws_eks_cluster" "main" {
     aws_internet_gateway.main,
     aws_nat_gateway.main
   ]
+  
+  # TEMPORARY LIFECYCLE BLOCK: Prevents destruction/replacement during import/destroy process
+  lifecycle {
+    ignore_changes = all
+  }
 }
 
  
@@ -86,6 +91,11 @@ resource "aws_eks_node_group" "public" {
     aws_iam_role_policy_attachment.eks_container_registry_policy,
     aws_eks_cluster.main
   ]
+  
+  # TEMPORARY LIFECYCLE BLOCK: Prevents destruction/replacement during import/destroy process
+  lifecycle {
+    ignore_changes = all
+  }
 }
 
 # Private Node Group
@@ -116,4 +126,9 @@ resource "aws_eks_node_group" "private" {
     aws_iam_role_policy_attachment.eks_container_registry_policy,
     aws_eks_cluster.main
   ]
+  
+  # TEMPORARY LIFECYCLE BLOCK: Prevents destruction/replacement during import/destroy process
+  lifecycle {
+    ignore_changes = all
+  }
 }

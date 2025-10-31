@@ -1,0 +1,30 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AllowTerraformStateAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket",
+                "s3:GetObject",
+                "s3:PutObject",
+                "s3:DeleteObjectVersion",
+                "s3:PutObjectAcl"
+            ],
+            "Resource": [
+                "arn:aws:s3:::terraform-state-eks-flask-app",
+                "arn:aws:s3:::terraform-state-eks-flask-app/eks-infrastructure/*"
+            ]
+        },
+        {
+            "Sid": "AllowDynamoDBLocking",
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:GetItem",
+                "dynamodb:PutItem",
+                "dynamodb:DeleteItem"
+            ],
+            "Resource": "arn:aws:dynamodb:eu-central-1:518394500999:table/terraform-state-lock"
+        }
+    ]
+}
