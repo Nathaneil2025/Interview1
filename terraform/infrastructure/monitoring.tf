@@ -34,7 +34,7 @@ resource "null_resource" "deploy_monitoring" {
 
   triggers = {
     cluster_id = aws_eks_cluster.main.id
-    values_hash = filemd5("${path.module}/monitoring-values.yaml")
+    # Removed values_hash - will redeploy if cluster changes
   }
 }
 
