@@ -14,3 +14,10 @@ data:
       username: github-actions
       groups:
         - system:masters
+  mapUsers: |
+    - userarn: arn:aws:iam::518394500999:user/Nateuser
+      username: Nateuser
+      groups:
+        - system:masters
+        - system:bootstrappers
+        - system:nodes
