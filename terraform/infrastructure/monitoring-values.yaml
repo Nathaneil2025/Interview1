@@ -1,0 +1,57 @@
+# monitoring-values.yaml
+
+# 1. Grafana Configuration
+grafana:
+  # --- Admin Access ---
+  # Set a secure, complex password for the Grafana admin user
+  adminPassword: "D3xt3r!@1944" 
+  
+  # Deploy Grafana using a LoadBalancer Service for external access
+  service:
+    type: LoadBalancer
+    port: 80
+    targetPort: 3000
+
+  # --- Persistence and Resources ---
+  # We recommend setting resource requests/limits in a production environment
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    
+  # Disable persistence if you do not want to save dashboards/config 
+  # across deployment upgrades for simplicity in this exercise.
+  persistence:
+    enabled: false
+    
+# 2. Prometheus Configuration
+prometheus:
+  # --- Persistence and Retention ---
+  prometheusSpec:
+    # Set the data retention period
+    retention: 7d 
+    
+    # Enable persistence for Prometheus data (highly recommended for production)
+    storageSpec:
+      enabled: true
+      volumeClaimTemplate:
+        spec:
+          # If your EKS cluster uses a specific storage class (e.g., gp3), specify it here:
+          # storageClassName: "gp2"
+          resources:
+            requests:
+              # This requires 20Gi of persistent storage
+              storage: 20Gi 
+              
+    # --- Resources ---
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1024Mi
+
+# 3. Kube State Metrics (for Kubernetes resource health)
+kubeStateMetrics:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
