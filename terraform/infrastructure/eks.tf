@@ -45,25 +45,6 @@ resource "aws_eks_access_entry" "github_actions_access" {
 }
 */
 
-# Kubeconfig and Dependency Keeper
-# This resource is required to satisfy the dependency in monitoring.tf
-# and runs 'update-kubeconfig' after the cluster and access entry are ready.
-resource "null_resource" "update_aws_auth" {
-  depends_on = [
-    aws_eks_cluster.main,
-   
-  ]
-
-  provisioner "local-exec" {
-    # Only updates kubeconfig; no longer manipulates aws-auth ConfigMap
-    command = "aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.main.name}"
-    interpreter = ["bash", "-c"]
-  }
-
-  triggers = {
-    cluster_id = aws_eks_cluster.main.id
-  }
-}
 
 ###########################################
 # EKS NODE GROUPS
