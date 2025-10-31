@@ -31,12 +31,7 @@ resource "aws_eks_cluster" "main" {
     aws_internet_gateway.main,
     aws_nat_gateway.main
   ]
-  
-  # REMOVED: lifecycle { ignore_changes = all }. Keep this removed unless
-  # you are actively performing an import or a very specific temporary operation.
 }
-
----
 
 # EKS Access Entries (Modern Replacement for aws-auth ConfigMap)
 
@@ -46,12 +41,11 @@ resource "aws_eks_access_entry" "node_group_access" {
   cluster_name  = aws_eks_cluster.main.name
   principal_arn = aws_iam_role.eks_nodes.arn
   kubernetes_groups = ["system:bootstrappers", "system:nodes"]
-  # The 'standard' type is appropriate for EKS Managed Node Group roles
-  type          = "standard" 
+  # FIX: Changed "standard" to "STANDARD" for proper case matching.
+  type          = "STANDARD" 
 }
 
-# Grant access for the GitHub Actions IAM Role (Assuming you have this role defined elsewhere)
-# You will need to define the GitHub Actions Role resource (e.g., aws_iam_role.github_actions)
+# Grant access for the GitHub Actions IAM Role 
 /*
 resource "aws_eks_access_entry" "github_actions_access" {
   cluster_name  = aws_eks_cluster.main.name
@@ -60,10 +54,25 @@ resource "aws_eks_access_entry" "github_actions_access" {
 }
 */
 
-# The null_resource for aws-auth is now entirely removed.
-# resource "null_resource" "update_aws_auth" is DELETED
+# Kubeconfig and Dependency Keeper
+# This resource is required to satisfy the dependency in monitoring.tf
+# and runs 'update-kubeconfig' after the cluster and access entry are ready.
+resource "null_resource" "update_aws_auth" {
+  depends_on = [
+    aws_eks_cluster.main,
+    aws_eks_access_entry.node_group_access
+  ]
 
----
+  provisioner "local-exec" {
+    # Only updates kubeconfig; no longer manipulates aws-auth ConfigMap
+    command = "aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.main.name}"
+    interpreter = ["bash", "-c"]
+  }
+
+  triggers = {
+    cluster_id = aws_eks_cluster.main.id
+  }
+}
 
 ###########################################
 # EKS NODE GROUPS
@@ -97,8 +106,6 @@ resource "aws_eks_node_group" "public" {
     aws_iam_role_policy_attachment.eks_container_registry_policy,
     aws_eks_cluster.main
   ]
-  
-  # REMOVED: lifecycle { ignore_changes = all }
 }
 
 # Private Node Group
@@ -129,11 +136,7 @@ resource "aws_eks_node_group" "private" {
     aws_iam_role_policy_attachment.eks_container_registry_policy,
     aws_eks_cluster.main
   ]
-  
-  # REMOVED: lifecycle { ignore_changes = all }
 }
-
----
 
 # EKS Addons
 resource "aws_eks_addon" "ebs_csi_driver" {
