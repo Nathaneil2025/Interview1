@@ -18,7 +18,7 @@ resource "null_resource" "deploy_monitoring" {
       helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
         --namespace monitoring \
         --version 57.0.0 \
-        --values ${path.module}/monitoring-values.yaml \
+        --values ${abspath(path.module)}/monitoring-values.yaml \
         --wait \
         --timeout 10m
     EOT
@@ -34,7 +34,6 @@ resource "null_resource" "deploy_monitoring" {
 
   triggers = {
     cluster_id = aws_eks_cluster.main.id
-    # Removed values_hash - will redeploy if cluster changes
   }
 }
 
