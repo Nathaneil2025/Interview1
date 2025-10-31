@@ -1,8 +1,15 @@
 from flask import Flask, jsonify
+from prometheus_flask_exporter import PrometheusMetrics
 import os
 import socket
 
 app = Flask(__name__)
+
+# Initialize Prometheus metrics - this automatically creates /metrics endpoint
+metrics = PrometheusMetrics(app)
+
+# Add static info metric about the app
+metrics.info('flask_app_info', 'Flask application information', version='2.0.0')
 
 @app.route('/')
 def home():
