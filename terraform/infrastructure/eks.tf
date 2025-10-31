@@ -35,15 +35,6 @@ resource "aws_eks_cluster" "main" {
 
 # EKS Access Entries (Modern Replacement for aws-auth ConfigMap)
 
-# Grant access for the Node Group's IAM role (aws_iam_role.eks_nodes)
-# This replaces the need for the manual ConfigMap update for nodes.
-resource "aws_eks_access_entry" "node_group_access" {
-  cluster_name  = aws_eks_cluster.main.name
-  principal_arn = aws_iam_role.eks_nodes.arn
-  kubernetes_groups = ["system:bootstrappers", "system:nodes"]
-  # FIX: Changed "standard" to "STANDARD" for proper case matching.
-  type          = "STANDARD" 
-}
 
 # Grant access for the GitHub Actions IAM Role 
 /*
