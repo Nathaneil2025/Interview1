@@ -1,0 +1,22 @@
+apiVersion: v1
+data:
+  mapRoles: |
+    - rolearn: arn:aws:iam::518394500999:role/eks-flask-app-eks-nodes-role
+      username: system:node:{{EC2PrivateDNSName}}
+      groups:
+        - system:bootstrappers
+        - system:nodes
+    - rolearn: arn:aws:iam::518394500999:role/GitHubActionsRole
+      username: github-actions
+      groups:
+        - system:masters
+kind: ConfigMap
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","data":{"mapRoles":"- rolearn: arn:aws:iam::518394500999:role/eks-flask-app-eks-nodes-role\n  username: system:node:{{EC2PrivateDNSName}}\n  groups:\n    - system:bootstrappers\n    - system:nodes\n- rolearn: arn:aws:iam::518394500999:role/GitHubActionsRole\n  username: github-actions\n  groups:\n    - system:masters\n"},"kind":"ConfigMap","metadata":{"annotations":{},"name":"aws-auth","namespace":"kube-system"}}
+  creationTimestamp: "2025-10-31T10:21:25Z"
+  name: aws-auth
+  namespace: kube-system
+  resourceVersion: "1483"
+  uid: e7a450f8-e619-4677-b08a-ffb4ebfcfbcd
